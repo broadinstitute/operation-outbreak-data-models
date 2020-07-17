@@ -1,0 +1,54 @@
+---
+title: "Aggregate SMA18 data"
+output:
+  html_document:
+    df_print: paged
+---
+
+This notebook aggregates by-minute case data from SMA 18 outbreak simulation in order to smooth out the case curve before further analysis. Can be adapted to other datasets.
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+# Original case data
+csv_table <- read.csv("case_counts0.csv")
+case_data <- data.frame(time = csv_table$Time, cases = csv_table$Count)
+head(case_data)
+
+max_time <- max(case_data$time)
+ggplot(data=subset(case_data, time <= max_time), aes(x=time, y=cases, group=1)) + geom_line()
+```
+
+```{r}
+grp_delta <-15
+
+case_data$grp <- floor(case_data$time / grp_delta)
+
+grp_data <- data.frame(time = case_data$grp, cases = case_data$cases)
+grp_data <- group_by(grp_data, time)
+
+sum_cases <- c()
+for (i in unique(grp_data$time)) {
+  temp <- subset(grp_data, time == i)
+  sum_cases <- c(sum_cases, sum(temp$cases))
+}
+
+grp_data <- data.frame(time = unique(grp_data$time), cases = sum_cases)
+
+n <-max(grp_data$time) + 5
+other_data <- data.frame('time' = seq(0, n-1), 'cases' = rep(0, n))
+
+temp <- merge(x = other_data, y = grp_data, by = "time", all.x = TRUE)
+temp[is.na(temp)] <- 0
+temp
+new_data <- data.frame('Time' = temp$time, 'Count' = temp$cases.x + temp$cases.y)
+new_data
+
+# plot both by minute and quarter-of-hour curves 
+ggplot(data=subset(new_data, Time <= n), aes(x=Time, y=Count, group=1)) + geom_line()
+
+# Save new aggregated data
+write.csv(new_data, file=file.path("case_counts.csv"), row.names=FALSE, na="")
+```
